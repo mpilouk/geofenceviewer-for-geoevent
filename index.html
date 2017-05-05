@@ -1,0 +1,471 @@
+﻿<!DOCTYPE html>
+<!--Author: Morakot Pilouk
+    Email: mpilouk@esri.com
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Geofence Viewer for GeoEvent Server</title>
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.3/esri/css/main.css">
+  <style>
+    html,
+    body,
+    #viewDiv {
+      padding: 0;
+      margin: 0;
+      height: 100%;
+      width: 100%;
+    }
+
+    #loginDiv {
+      font-family: "Arial";
+      position: absolute;
+      z-index: 101;
+      display: none;
+      width: 500px;
+      border: 2px solid #f44271;
+      border-radius: 5px;
+      margin-top: 50px;
+      margin-left: 200px;
+      background: #42d4f4;
+    }
+
+    #dialogFrame {
+      margin: 10px;
+    }
+
+    #login1, #refresh, #clear {
+      margin-left: 10px;
+      font-family: "Arial";
+    }
+
+    h2 {
+      font-family: "Arial";
+    }
+  </style>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script src="https://js.arcgis.com/4.3/"></script>
+
+  <script>
+    require([
+      "esri/Map",
+      "esri/views/MapView",
+      "esri/Graphic",
+      "esri/geometry/support/jsonUtils",
+      "esri/geometry/Point",
+      "esri/geometry/Polyline",
+      "esri/geometry/Polygon",
+      "esri/symbols/SimpleMarkerSymbol",
+      "esri/symbols/SimpleLineSymbol",
+      "esri/symbols/SimpleFillSymbol",
+      "esri/request",
+      "esri/config",
+      "esri/PopupTemplate",
+      "dojo/domReady!"
+    ], function (
+      Map, MapView,
+      Graphic, geometryJsonUtils, Point, Polyline, Polygon,
+      SimpleMarkerSymbol, SimpleLineSymbol, SimpleFillSymbol, esriRequest, esriConfig, PopupTemplate
+    ) {
+        var tokenEndPoint = "/sharing/generateToken";
+        var server = "";
+        var port = "";
+        var serverType = "";
+        var site = "";
+        var username = "";
+        var password = "";
+        var isLoggedIn = false;
+        var token = "";
+
+        $(document).ready(function () {
+          //console.log("document ready!");
+          server = $("#hostname").val();
+          port = $("#port").val();
+          site = $("#site").val();
+          //serverType = $("input:radio[name=servertype]:nth(0)").attr("checked", true).val();
+          $("#tokenurl").val("https://" + server + "/" + site + tokenEndPoint);
+          $("#tokenurl").css("width", (($("#tokenurl").val().length + 1) * 6) + 'px');
+
+          $("#geoeventurl").val("https://" + server + ":" + port + "/geoevent/admin");
+          $("#geoeventurl").css("width", (($("#geoeventurl").val().length + 1) * 6) + 'px');
+
+          $("#hostname").css("width", (($("#hostname").val().length + 1) * 6) + 'px');
+          $("#site").css("width", (($("#site").val().length + 1) * 6) + 'px');
+          $("#port").css("width", (($("#port").val().length + 1) * 6) + 'px');
+          $("#username").css("width", (($("#username").val().length + 1) * 6) + 'px');
+        });
+
+        $("a#login1").click(function () {
+          $('#loginDiv').fadeIn('slow');
+        });
+
+        $('#cancel').click(function () {
+          $('#loginDiv').hide();
+        });
+
+        $("#login").click(function () {
+          $('#loginDiv').hide();
+          //console.log("login " + $("#hostname").val() + " " + $("#username").val() + " " + $("#psw").val());
+          server = $("#hostname").val();
+          port = $("#port").val();
+          serverType = $("input:radio[name=servertype]:nth(0)").attr("checked", true).val();
+          username = $("#username").val();
+          password = $("#psw").val();
+          getToken();
+        });
+
+        $("#refresh").click(function () {
+          if (isLoggedIn == true) {
+            getGeofences(false);
+          }
+          else {
+            $('#loginDiv').fadeIn('slow');
+          }
+        });
+
+        $("#clear").click(function () {
+          view.graphics.removeAll();
+        });
+
+        $("#hostname").change(function () {
+          server = $("#hostname").val();
+          $("#tokenurl").val("https://" + server + "/" + site + tokenEndPoint);
+          $("#tokenurl").css("width", (($("#tokenurl").val().length + 1) * 6) + 'px');
+
+          $("#geoeventurl").val("https://" + server + ":" + port + "/geoevent/admin");
+          $("#geoeventurl").css("width", (($("#geoeventurl").val().length + 1) * 6) + 'px');
+        });
+
+        $("#port").change(function () {
+          //$("#tokenurl").text("https://"+ $("#hostname").val()+"/"+ $("#site").val() + tokenEndPoint);
+          $("#port").css("width", (($("#port").val().length + 1) * 6) + 'px');
+          $("#geoeventurl").val("https://" + server + ":" + port + "/geoevent/admin");
+          $("#geoeventurl").css("width", (($("#geoeventurl").val().length + 1) * 6) + 'px');
+        });
+
+        $("#site").change(function () {
+          site = $("#site").val();
+          $("#site").css("width", (($("#site").val().length + 1) * 6) + 'px');
+
+          if (site === "arcgis") {
+            tokenEndPoint = "/tokens/generateToken";
+            site = ":6443/" + site;
+          }
+          else {
+            tokenEndPoint = "/sharing/generateToken";
+            site = "/" + site;
+          }
+          $("#tokenurl").val("https://" + server + site + tokenEndPoint);
+          $("#tokenurl").css("width", (($("#tokenurl").val().length + 1) * 6) + 'px');
+        });
+
+        function getToken() {
+          var tokenUrl = $("#tokenurl").val();
+          var params = 'username=' + username + '&password=' + password + '&client=referer&referer=https://' + location.hostname + '&expiration=60&f=json';
+
+          $.ajax({
+            url: tokenUrl,
+            type: "POST",
+            async: true,
+            cache: false,
+            data: params,
+            contentType: "application/x-www-form-urlencoded",
+            complete: function () {
+              //console.log("getToken complete");
+            },
+            success: function (result) {
+              //$.mobile.hidePageLoadingMsg();
+              var ret = JSON.parse(result);
+              //console.log(ret);
+              token = ret.token;
+              isLoggedIn = true;
+              getGeofences(true);
+            },
+            error: function (request, error) {
+              console.log("Error: " + error + " " + request.status + " " + request.statusText + " " + request.responseText);
+              isLoggedIn = false;
+            }
+          });
+        }
+
+        function getGeofences(autoZoom) {
+          var server = $("#hostname").val();
+          var gepUrl = "https://" + server + ":" + $("#port").val() + "/geoevent/admin/geofences/.json?token=" + token;
+          //var gepUrl = "https://realtimegis2016.esri.com:6143/geoevent/admin/geofences/.json?token=" + adminToken;
+          var fullExtent = null;
+          $.ajax({
+            url: gepUrl,
+            type: "GET",
+            async: true,
+            cache: false,
+            contentType: "application/json",
+            beforeSend: function (xhr) {
+              xhr.setRequestHeader('Authorization', token);
+            },
+            complete: function () {
+              //console.log("getGeofences complete");
+            },
+            success: function (result) {
+              //console.log(result);
+              // Create a symbol for drawing the point
+              var markerSymbol = new SimpleMarkerSymbol({
+                color: [226, 119, 40],
+                outline: { // autocasts as new SimpleLineSymbol()
+                  color: [255, 255, 255],
+                  width: 2
+                }
+              });
+              // Create a symbol for drawing the line
+              var lineSymbol = new SimpleLineSymbol({
+                color: [226, 119, 40],
+                width: 4
+              });
+              // Create a symbol for rendering the graphic
+              var fillSymbol = new SimpleFillSymbol({
+                color: [227, 139, 79, 0.8],
+                outline: { // autocasts as new SimpleLineSymbol()
+                  color: [255, 255, 255],
+                  width: 1
+                }
+              });
+
+              var popupTemplate = new PopupTemplate({
+                title: "{name}",
+                content: [{
+                  type: "fields",
+                  fieldInfos: [{
+                    fieldName: "Id"
+                  }, {
+                    fieldName: "Name"
+                  }, {
+                    fieldName: "Category"
+                  }, {
+                    fieldName: "Active"
+                  }]
+                }]
+              });
+
+              for (var k in result) {
+                //console.log(k, result[k], result[k].geometry, result[k].id);
+
+                var att = {
+                  Id: result[k].id,
+                  Name: result[k].name,
+                  Category: result[k].category,
+                  Active: result[k].active
+                };
+
+                //check if point, polyline, or polygon
+                var geometryType = "POINT";
+                if (result[k].geometry.value.rings != undefined) {
+                  //this is either polyline or polygon
+                  //check further
+                  if (result[k].geometry.value.rings[0][0].x == result[k].geometry.value.rings[0][result[k].geometry.value.rings.length - 1].x &&
+                    result[k].geometry.value.rings[0][0].y == result[k].geometry.value.rings[0][result[k].geometry.value.rings.length - 1].y
+                  ) {
+                    geometryType = "POLYGON";
+                  }
+                  else {
+                    geometryType = "POLYLINE";
+                  }
+
+                }
+                else if (result[k].geometry.value.x != undefined) {
+                  geometryType = "POINT";
+                }
+
+                if (geometryType === "POINT") {
+                  /**********************
+                  * Create a point graphic
+                  **********************/
+                  var point = new Point({
+                    x: result[k].geometry.value.x,
+                    y: result[k].geometry.value.y,
+                    spatialReference: result[k].geometry.value.spatialReference
+                  });
+                  // Create a graphic and add the geometry and symbol to it
+                  var pointGraphic = new Graphic({
+                    geometry: point,
+                    symbol: markerSymbol,
+                    attributes: att,
+                    popupTemplate: popupTemplate
+                  });
+                  view.graphics.add(pointGraphic);
+                  if (!fullExtent)
+                    fullExtent = pointGraphic.geometry.extent.clone();
+                  else {
+                    if (pointGraphic.geometry.extent != null) {
+                      fullExtent.union(pointGraphic.geometry.extent)
+                    }
+                    else {
+                      //fullExtent.union(pointGraphic.geometry);
+                    }
+                  }
+                }
+                else if (geometryType === "POLYLINE") {
+                  var polyline = new Polyline({
+                    paths: result[k].geometry.value.paths,
+                    spatialReference: result[k].geometry.value.spatialReference
+                  });
+                  var polylineGraphic = new Graphic({
+                    geometry: polyline,
+                    symbol: lineSymbol,
+                    attributes: att,
+                    popupTemplate: popupTemplate
+                  });
+                  view.graphics.add(polylineGraphic);
+                  if (!fullExtent)
+                    fullExtent = polylineGraphic.geometry.extent.clone();
+                  else {
+                    if (polylineGraphic.geometry.extent != null) {
+                      fullExtent.union(polylineGraphic.geometry.extent)
+                    }
+                  }
+                }
+                else if (geometryType === "POLYGON") {
+                  // Create a polygon geometry
+                  var polygon = new Polygon({
+                    rings: result[k].geometry.value.rings,
+                    spatialReference: result[k].geometry.value.spatialReference
+                  });
+                  // Add the geometry and symbol to a new graphic
+                  var polygonGraphic = new Graphic({
+                    geometry: polygon,
+                    symbol: fillSymbol,
+                    attributes: att,
+                    popupTemplate: popupTemplate
+                  });
+                  view.graphics.add(polygonGraphic);
+                  if (!fullExtent)
+                    fullExtent = polygonGraphic.geometry.extent.clone();
+                  else {
+                    if (polygonGraphic.geometry.extent != null) {
+                      fullExtent.union(polygonGraphic.geometry.extent)
+                    }
+                  }
+                }
+              } //end for
+              if (autoZoom == true) {
+                view.goTo(fullExtent).then(function () {
+                  if (!view.extent.contains(fullExtent))
+                    view.zoom -= 1;
+                });
+              }
+            },
+            error: function (request, error) {
+              console.log("Error: " + error + " " + request.status + " " + request.statusText + " " + request.responseText);
+            }
+          });
+        }
+
+        //console.log("Draw map");
+        var map = new Map({
+          basemap: "hybrid"
+        });
+
+        var view = new MapView({
+          center: [-80, 35],
+          container: "viewDiv",
+          map: map,
+          zoom: 3
+        });
+
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        function esriGetRequest(url, responseName, callback) {
+          esriXhrRequest(url, false, null, responseName, callback);
+        }
+
+        function esriPostRequest(url, body, responseName, callback) {
+          esriXhrRequest(url, true, body, responseName, callback);
+        }
+
+        function esriXhrRequest(url, usePost, body, responseName, callback) {
+          var request = {
+            url: url,
+            handleAs: "json",
+            callbackParamName: "callback",
+            headers: { "Content-Type": "text/plain" } //"application/json"
+          };
+          if (body) {
+            request.content = dojo.toJson(body);
+          } else {
+            request.content = { f: "json" };
+          }
+          var options = {};
+          if (usePost) {
+            options.usePost = true;
+          }
+          var theRequest = esriRequest(request, options);
+          theRequest.then(
+            function (response) {
+              if (responseName)
+                _responses[responseName] = response;
+              if (callback)
+                callback();
+            }, function (error) {
+              //console.log("Error: ", error);
+            });
+        }
+
+        function dojoPostRequest(url, body, responseName, callback) {
+          dojoXhrRequest(url, true, body, responseName, callback);
+        }
+
+        function dojoGetRequest(url, responseName, callback) {
+          dojoXhrRequest(url, false, null, responseName, callback);
+        }
+
+        function dojoXhrRequest(url, usePost, body, responseName, callback) {
+          var request = {
+            handleAs: "json",
+            headers: { "Content-Type": "application/json" },
+            timeout: 5000
+          };
+          var theRequest;
+          if (usePost) {
+            request.data = dojo.toJson(body);
+            theRequest = dojoRequest.post(url, request);
+          } else {
+            theRequest = dojoRequest.get(url, request);
+          }
+          theRequest.then(
+            function (response) {
+              if (responseName)
+                _responses[responseName] = response;
+              if (callback)
+                callback();
+            }, function (error) {
+              //console.log("Error: ", error);
+            });
+        }
+
+      });
+  </script>
+</head>
+
+<body>
+  <h2 align="center">Geofence Viewer for GeoEvent Server</h2>
+  <a id="login1" href="#">Login</a>
+  <a id="refresh" href="#">Refresh</a>
+  <a id="clear" href="#">Clear</a><br />
+  <div id="loginDiv">
+    <div id="dialogFrame">
+      Hostname: <input type="text" id="hostname" name="hostname" value="geoeventsample4.esri.com"></input><br><br>
+      GeoEvent Port: <input type="text" id="port" name="port" value="6143"></input><br><br>
+      Site: <input type="text" id="site" name="site" value="portal"></input><br><br>
+      Token URL: <input type="text" id="tokenurl" name="tokenurl"></input><br><br>
+      GeoEvent URL: <input type="text" id="geoeventurl" name="geoeventurl"></input><br><br>
+      Username: <input type="text" id="username" name="username" value="siteadmin"></input><br><br>
+      Password: <input type="password" id="psw" name="psw"></input><br><br>
+      <button id="login" name="login">Log in</button>
+      <button type="button" id="cancel">Cancel</button>
+    </div>
+  </div>
+  <br>
+  <div id="viewDiv"></div>
+</body>
+
+</html>
