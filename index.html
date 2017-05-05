@@ -79,20 +79,16 @@
         var password = "";
         var isLoggedIn = false;
         var token = "";
+        var soapUrl = "";
+        var owningSystemUrl = "";
+        var tokenServicesUrl = "";        
 
         $(document).ready(function () {
           //console.log("document ready!");
           server = $("#hostname").val();
           port = $("#port").val();
-          site = $("#site").val();
-          $("#tokenurl").val("https://" + server + "/" + site + tokenEndPoint);
-          $("#tokenurl").css("width", (($("#tokenurl").val().length + 1) * 6) + 'px');
 
-          $("#geoeventurl").val("https://" + server + ":" + port + "/geoevent/admin");
-          $("#geoeventurl").css("width", (($("#geoeventurl").val().length + 1) * 6) + 'px');
-
-          $("#hostname").css("width", (($("#hostname").val().length + 1) * 6) + 'px');
-          $("#site").css("width", (($("#site").val().length + 1) * 6) + 'px');
+          $("#hostname").css("width", (($("#hostname").val().length + 2) * 6) + 'px');
           $("#port").css("width", (($("#port").val().length + 1) * 6) + 'px');
           $("#username").css("width", (($("#username").val().length + 1) * 6) + 'px');
         });
@@ -109,10 +105,9 @@
           $('#loginDiv').hide();
           server = $("#hostname").val();
           port = $("#port").val();
-          serverType = $("input:radio[name=servertype]:nth(0)").attr("checked", true).val();
           username = $("#username").val();
           password = $("#psw").val();
-          getToken();
+          getArcGISInfo();
         });
 
         $("#refresh").click(function () {
@@ -130,41 +125,46 @@
 
         $("#hostname").change(function () {
           server = $("#hostname").val();
-          $("#tokenurl").val("https://" + server + "/" + site + tokenEndPoint);
-          $("#tokenurl").css("width", (($("#tokenurl").val().length + 1) * 6) + 'px');
-
-          $("#geoeventurl").val("https://" + server + ":" + port + "/geoevent/admin");
-          $("#geoeventurl").css("width", (($("#geoeventurl").val().length + 1) * 6) + 'px');
         });
 
         $("#port").change(function () {
           $("#port").css("width", (($("#port").val().length + 1) * 6) + 'px');
-          $("#geoeventurl").val("https://" + server + ":" + port + "/geoevent/admin");
-          $("#geoeventurl").css("width", (($("#geoeventurl").val().length + 1) * 6) + 'px');
         });
 
-        $("#site").change(function () {
-          site = $("#site").val();
-          $("#site").css("width", (($("#site").val().length + 1) * 6) + 'px');
+        function getArcGISInfo() {
+          var agsUrl = "https://" + server + ":" + port + "/geoevent/admin/localarcgis.json";
+          var params = '';
 
-          if (site === "arcgis") {
-            tokenEndPoint = "/tokens/generateToken";
-            site = ":6443/" + site;
-          }
-          else {
-            tokenEndPoint = "/sharing/generateToken";
-            site = "/" + site;
-          }
-          $("#tokenurl").val("https://" + server + site + tokenEndPoint);
-          $("#tokenurl").css("width", (($("#tokenurl").val().length + 1) * 6) + 'px');
-        });
+          $.ajax({
+            url: agsUrl,
+            type: "GET",
+            async: true,
+            cache: false,
+            data: params,
+            contentType: "application/json",
+            complete: function () {
+              //console.log("getToken complete");
+            },
+            success: function (result) {
+              //$.mobile.hidePageLoadingMsg();
+              //console.log(ret);
+              soapUrl = result.soapUrl;
+              owningSystemUrl = result.owningSystemUrl;
+              tokenServicesUrl = result.authInfo.tokenServicesUrl;
+              getToken();
+            },
+            error: function (request, error) {
+              console.log("Error: " + error + " " + request.status + " " + request.statusText + " " + request.responseText);
+              isLoggedIn = false;
+            }
+          });
+        }
 
         function getToken() {
-          var tokenUrl = $("#tokenurl").val();
           var params = 'username=' + username + '&password=' + password + '&client=referer&referer=https://' + location.hostname + '&expiration=60&f=json';
 
           $.ajax({
-            url: tokenUrl,
+            url: tokenServicesUrl,
             type: "POST",
             async: true,
             cache: false,
@@ -381,9 +381,6 @@
     <div id="dialogFrame">
       Hostname: <input type="text" id="hostname" name="hostname" value="geoeventsample4.esri.com"></input><br><br>
       GeoEvent Port: <input type="text" id="port" name="port" value="6143"></input><br><br>
-      Site: <input type="text" id="site" name="site" value="portal"></input><br><br>
-      Token URL: <input type="text" id="tokenurl" name="tokenurl"></input><br><br>
-      GeoEvent URL: <input type="text" id="geoeventurl" name="geoeventurl"></input><br><br>
       Username: <input type="text" id="username" name="username" value="siteadmin"></input><br><br>
       Password: <input type="password" id="psw" name="psw"></input><br><br>
       <button id="login" name="login">Log in</button>
