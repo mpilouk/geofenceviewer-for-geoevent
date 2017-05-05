@@ -44,6 +44,11 @@
     h2 {
       font-family: "Arial";
     }
+
+    .esri-legend {
+      background-color: black;
+      color: white;
+    }
   </style>
 
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
@@ -58,30 +63,30 @@
       "esri/geometry/Point",
       "esri/geometry/Polyline",
       "esri/geometry/Polygon",
+      "esri/renderers/SimpleRenderer",
       "esri/symbols/SimpleMarkerSymbol",
       "esri/symbols/SimpleLineSymbol",
       "esri/symbols/SimpleFillSymbol",
       "esri/request",
       "esri/config",
       "esri/PopupTemplate",
+      "esri/widgets/Legend",
       "dojo/domReady!"
     ], function (
       Map, MapView,
-      Graphic, geometryJsonUtils, Point, Polyline, Polygon,
-      SimpleMarkerSymbol, SimpleLineSymbol, SimpleFillSymbol, esriRequest, esriConfig, PopupTemplate
+      Graphic, geometryJsonUtils, Point, Polyline, Polygon, SimpleRenderer,
+      SimpleMarkerSymbol, SimpleLineSymbol, SimpleFillSymbol, esriRequest, esriConfig, PopupTemplate, Legend
     ) {
-        var tokenEndPoint = "/sharing/generateToken";
         var server = "";
         var port = "";
-        var serverType = "";
-        var site = "";
         var username = "";
         var password = "";
         var isLoggedIn = false;
         var token = "";
         var soapUrl = "";
         var owningSystemUrl = "";
-        var tokenServicesUrl = "";        
+        var tokenServicesUrl = "";
+        var geofenceSymbolByCategory = {};        
 
         $(document).ready(function () {
           //console.log("document ready!");
@@ -246,7 +251,6 @@
 
               for (var k in result) {
                 //console.log(k, result[k], result[k].geometry, result[k].id);
-
                 var att = {
                   Id: result[k].id,
                   Name: result[k].name,
@@ -282,6 +286,22 @@
                     y: result[k].geometry.value.y,
                     spatialReference: result[k].geometry.value.spatialReference
                   });
+
+                if (geofenceSymbolByCategory[result[k].category] == undefined) {
+                  // Create a symbol for drawing the point
+                  markerSymbol = new SimpleMarkerSymbol({
+                    color: [226, 119, k],
+                    outline: { // autocasts as new SimpleLineSymbol()
+                      color: [255, 255, 255],
+                      width: 2
+                    }
+                  });
+                  geofenceSymbolByCategory[result[k].category] = markerSymbol;
+                }
+                else {
+                  markerSymbol = geofenceSymbolByCategory[result[k].category];
+                }
+
                   // Create a graphic and add the geometry and symbol to it
                   var pointGraphic = new Graphic({
                     geometry: point,
@@ -289,6 +309,7 @@
                     attributes: att,
                     popupTemplate: popupTemplate
                   });
+
                   view.graphics.add(pointGraphic);
                   if (!fullExtent)
                     fullExtent = pointGraphic.geometry.extent.clone();
@@ -306,6 +327,19 @@
                     paths: result[k].geometry.value.paths,
                     spatialReference: result[k].geometry.value.spatialReference
                   });
+
+                  if (geofenceSymbolByCategory[result[k].category] == undefined) {
+                    lineSymbol = new SimpleLineSymbol({
+                      color: [226, k, 40],
+                      width: 4
+                    });
+
+                    geofenceSymbolByCategory[result[k].category] = lineSymbol;
+                  }
+                  else {
+                    lineSymbol = geofenceSymbolByCategory[result[k].category];
+                  }
+                  
                   var polylineGraphic = new Graphic({
                     geometry: polyline,
                     symbol: lineSymbol,
@@ -327,6 +361,22 @@
                     rings: result[k].geometry.value.rings,
                     spatialReference: result[k].geometry.value.spatialReference
                   });
+
+                  if (geofenceSymbolByCategory[result[k].category] == undefined) {
+                    fillSymbol = new SimpleFillSymbol({
+                      color: [k, 139, 79, 0.8],
+                      outline: { // autocasts as new SimpleLineSymbol()
+                        color: [255, 255, 255],
+                        width: 1
+                      }
+                    });
+
+                    geofenceSymbolByCategory[result[k].category] = fillSymbol;
+                  }
+                  else {
+                    fillSymbol = geofenceSymbolByCategory[result[k].category];
+                  }
+                  
                   // Add the geometry and symbol to a new graphic
                   var polygonGraphic = new Graphic({
                     geometry: polygon,
